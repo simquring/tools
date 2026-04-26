@@ -2,7 +2,7 @@
   "use strict";
 
   // ================= CONFIG =================
-  const CONFIG = Object.freeze({
+  const CONFIG = {
     storageKey: "api_keys",
     rotationKey: "auto_rotation",
     currentKeyIndex: "current_key",
@@ -10,7 +10,7 @@
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/models/",
     maxRetries: 3,
     retryDelay: 1000,
-  });
+  };
 
   // ================= STORAGE =================
   const Storage = {
@@ -36,13 +36,12 @@
 
     save() {
       Storage.set(CONFIG.storageKey, this.keys);
-      localStorage.setItem(CONFIG.currentKeyIndex, this.currentIndex);
       Storage.set(CONFIG.rotationKey, this.autoRotation);
+      localStorage.setItem(CONFIG.currentKeyIndex, this.currentIndex);
     }
 
-    add(key) {
+    addKey(key) {
       const k = key.trim();
-
       if (!k || k.length < 20) throw new Error("API Key tidak valid");
       if (this.keys.some(x => x.key === k)) throw new Error("API Key sudah ada");
 
@@ -55,19 +54,19 @@
       this.save();
     }
 
-    delete(id) {
+    deleteKey(id) {
       this.keys = this.keys.filter(k => k.id !== id);
       if (this.currentIndex >= this.keys.length) this.currentIndex = 0;
       this.save();
     }
 
-    getList() {
+    getActiveList() {
       const valid = this.keys.filter(k => k.status === "valid");
       return valid.length ? valid : this.keys;
     }
 
-    getCurrent() {
-      const list = this.getList();
+    getCurrentKey() {
+      const list = this.getActiveList();
       if (!list.length) return null;
 
       if (this.currentIndex >= list.length) this.currentIndex = 0;
@@ -75,7 +74,7 @@
     }
 
     rotate() {
-      const list = this.getList();
+      const list = this.getActiveList();
       if (!this.autoRotation || list.length <= 1) return false;
 
       this.currentIndex = (this.currentIndex + 1) % list.length;
@@ -83,13 +82,13 @@
       return true;
     }
 
-    async check(id) {
-      const item = this.keys.find(k => k.id === id);
-      if (!item) return;
+    async checkKey(id) {
+      const key = this.keys.find(k => k.id === id);
+      if (!key) return;
 
       try {
         const res = await fetch(
-          `${CONFIG.baseUrl}${CONFIG.model}:generateContent?key=${item.key}`,
+          `${CONFIG.baseUrl}${CONFIG.model}:generateContent?key=${key.key}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -99,20 +98,20 @@
           }
         );
 
-        if (res.ok) item.status = "valid";
-        else if (res.status === 429) item.status = "limit";
-        else item.status = "invalid";
+        if (res.ok) key.status = "valid";
+        else if (res.status === 429) key.status = "limit";
+        else key.status = "invalid";
       } catch {
-        item.status = "invalid";
+        key.status = "invalid";
       }
 
       this.save();
-      return item.status;
+      return key.status;
     }
   }
 
-  // ================= API =================
-  async function callAPI(prompt, apiKey) {
+  // ================= API CALL =================
+  async function callGemini(prompt, apiKey) {
     const url = `${CONFIG.baseUrl}${CONFIG.model}:generateContent?key=${apiKey}`;
 
     for (let i = 0; i < CONFIG.maxRetries; i++) {
@@ -147,28 +146,27 @@
     const body = text.match(/<isi>([\s\S]*?)<\/isi>/i);
 
     return {
-      judul: title ? title[1].split("|").map(x => x.trim()) : [],
+      judul: title ? title[1].split("|").map(t => t.trim()) : [],
       isi: body ? body[1].trim() : text,
     };
   }
 
-  // ================= UI =================
-  class UI {
+  // ================= UI CONTROLLER =================
+  class UIController {
     constructor() {
       this.api = new APIKeyManager();
       this.init();
     }
 
     init() {
-      this.output = document.getElementById("output-content");
       this.btn = document.getElementById("btn-generate");
       this.topic = document.getElementById("topic");
+      this.output = document.getElementById("output-content");
 
-      this.btn.onclick = () => this.generate();
+      this.btn.addEventListener("click", () => this.generate());
     }
 
     mask(key) {
-      if (!key) return "";
       return key.slice(0, 8) + "••••••••" + key.slice(-4);
     }
 
@@ -177,8 +175,8 @@
     }
 
     async generate() {
-      const key = this.api.getCurrent();
-      if (!key) return alert("Tambahkan API Key");
+      const key = this.api.getCurrentKey();
+      if (!key) return alert("Tambahkan API Key dulu");
 
       const topic = this.topic.value.trim();
       if (!topic) return alert("Isi topik dulu");
@@ -186,7 +184,7 @@
       this.setLoading(true);
 
       try {
-        const text = await callAPI(topic, key.key);
+        const text = await callGemini(topic, key.key);
         const parsed = parseResponse(text);
 
         this.output.innerHTML = parsed.isi.replace(/\n/g, "<br>");
@@ -210,7 +208,7 @@
 
   // ================= INIT =================
   document.addEventListener("DOMContentLoaded", () => {
-    window.uiController = new UI();
+    window.uiController = new UIController();
   });
 
 })();
