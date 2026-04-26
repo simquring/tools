@@ -1,256 +1,197 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Gudang Konten - AI Content Generator</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Content Generator</title>
 
-  <!-- Styles -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-  <link rel="stylesheet" href="style.css" />
+<style>
+body {
+    font-family: Arial;
+    background: #0f172a;
+    color: white;
+    padding: 20px;
+}
+
+.hidden { display: none; }
+
+.container {
+    display: flex;
+    gap: 20px;
+}
+
+.box {
+    background: #1e293b;
+    padding: 20px;
+    border-radius: 10px;
+    flex: 1;
+}
+
+button {
+    padding: 10px;
+    background: #6366f1;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+input, select, textarea {
+    width: 100%;
+    padding: 10px;
+    margin-top: 5px;
+    margin-bottom: 10px;
+}
+</style>
 </head>
 
-<body class="text-white flex items-center justify-center p-4">
+<body>
 
-  <!-- ================= MODAL: DELETE ================= -->
-  <div id="confirm-delete-modal" class="modal-overlay hidden">
-    <div class="modal-container max-w-md">
-      <div class="p-8 text-center">
-        <div class="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-          <i class="fa-solid fa-trash-can text-3xl text-red-400"></i>
-        </div>
+<div class="container">
 
-        <h3 class="text-2xl font-bold mb-2">Hapus API Key?</h3>
-        <p class="text-gray-400 mb-6">
-          API key ini akan dihapus permanent. Tindakan ini tidak dapat dibatalkan.
-        </p>
+<!-- LEFT -->
+<div class="box">
+<h3>Generator</h3>
 
-        <div class="flex justify-center gap-3">
-          <button id="cancel-delete" class="px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg font-semibold">
-            <i class="fa-solid fa-xmark mr-2"></i>Batal
-          </button>
+<select id="content-type">
+<option value="cerita">Cerita</option>
+<option value="islami">Islami</option>
+</select>
 
-          <button id="confirm-delete" class="px-6 py-3 bg-red-600 hover:bg-red-700 rounded-lg font-semibold">
-            <i class="fa-solid fa-trash mr-2"></i>Ya, Hapus
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
+<input id="topic" placeholder="Topik">
 
-  <!-- ================= MODAL: API ================= -->
-  <div id="api-modal" class="modal-overlay hidden">
-    <div class="modal-container">
+<select id="language">
+<option>Bahasa Indonesia</option>
+<option>Lainnya</option>
+</select>
 
-      <!-- Header -->
-      <div class="modal-header">
-        <h2><i class="fa-solid fa-key mr-2"></i>Pengaturan API Key</h2>
-        <button id="close-modal" class="close-btn">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
-      </div>
+<input id="language-manual" class="hidden" placeholder="Isi bahasa">
 
-      <!-- Body -->
-      <div class="modal-body">
+<input type="range" id="paragraph-slider" min="1" max="8" value="2">
+<span id="paragraph-label">5</span>
 
-        <!-- Add API -->
-        <div class="api-input-section">
-          <label class="block text-sm text-gray-300 mb-2">Tambah API Key Baru</label>
+<textarea id="extra-prompt" placeholder="Tambahan"></textarea>
 
-          <div class="flex gap-2">
-            <input id="new-api-key" type="text"
-              placeholder="Masukkan Gemini API Key..."
-              class="flex-1 modern-input px-4 py-2.5 rounded-lg outline-none text-sm" />
+<button id="btn-generate">Buat Konten</button>
+</div>
 
-            <button id="add-api-key" class="gradient-btn px-6 py-2.5 rounded-lg font-semibold">
-              <i class="fa-solid fa-plus mr-2"></i>Tambah
-            </button>
-          </div>
+<!-- RIGHT -->
+<div class="box">
+<h3>Hasil</h3>
+<div id="output-content">Belum ada</div>
+</div>
 
-          <p class="text-xs text-gray-400 mt-2">
-            <i class="fa-solid fa-circle-info mr-1"></i>
-            Dapatkan API Key di
-            <a href="https://aistudio.google.com/apikey" target="_blank"
-              class="text-indigo-400 hover:text-indigo-300">
-              Google AI Studio
-            </a>
-          </p>
-        </div>
+</div>
 
-        <!-- List -->
-        <div class="api-keys-list">
-          <div class="flex justify-between items-center mb-3">
-            <h3 class="text-sm font-semibold text-gray-300">Daftar API Key</h3>
-            <button id="check-all-keys" class="text-xs text-indigo-400 hover:text-indigo-300">
-              <i class="fa-solid fa-rotate mr-1"></i>Cek Semua Status
-            </button>
-          </div>
+<script>
+(function(){
 
-          <div id="api-keys-container"
-            class="space-y-2 max-h-80 overflow-y-auto custom-scrollbar">
-            <div class="text-center text-gray-500 text-sm py-8">
-              <i class="fa-solid fa-key text-3xl mb-2 opacity-50"></i>
-              <p>Belum ada API Key</p>
-            </div>
-          </div>
-        </div>
+const CONFIG = {
+    storageKey: 'api_keys',
+    model: 'gemini-2.5-flash',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models/'
+};
 
-        <!-- Auto Rotation -->
-        <div class="rotation-settings flex items-center justify-between">
-          <div>
-            <h3 class="text-sm font-semibold text-gray-300">Auto Rotation</h3>
-            <p class="text-xs text-gray-400">
-              Otomatis ganti key saat limit tercapai
-            </p>
-          </div>
+const paragraphMap = {1:3,2:5,3:8,4:10,5:15,6:20,7:25,8:30};
 
-          <label class="toggle-switch">
-            <input type="checkbox" id="auto-rotation" checked />
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
+class APIKeyManager {
+    constructor(){
+        this.keys = JSON.parse(localStorage.getItem(CONFIG.storageKey) || '[]');
+    }
 
-      </div>
-    </div>
-  </div>
+    getKey(){
+        return this.keys[0] || null;
+    }
 
-  <!-- ================= MAIN ================= -->
-  <div class="w-full max-w-7xl modern-card rounded-2xl p-6 md:p-8 grid lg:grid-cols-2 gap-8 min-h-[85vh] animate-fade-in">
+    addKey(key){
+        this.keys.push(key);
+        localStorage.setItem(CONFIG.storageKey, JSON.stringify(this.keys));
+    }
+}
 
-    <!-- ========= LEFT ========= -->
-    <div class="flex flex-col">
+async function callAPI(prompt, key){
+    const res = await fetch(`${CONFIG.baseUrl}${CONFIG.model}:generateContent?key=${key}`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+            contents:[{parts:[{text:prompt}]}]
+        })
+    });
 
-      <!-- Header -->
-      <div class="mb-6">
-        <div class="flex justify-between items-center mb-2">
+    const data = await res.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || 'Error';
+}
 
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-              <i class="fa-solid fa-wand-magic-sparkles"></i>
-            </div>
+function generatePrompt(topic, lang, pCount){
+    return `Tulis ${pCount} paragraf tentang ${topic} dalam bahasa ${lang}`;
+}
 
-            <div>
-              <h1 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-300 to-purple-300">
-                Gudang Konten
-              </h1>
-              <p class="text-xs text-gray-400">AI Content Generator Pro</p>
-            </div>
-          </div>
+class App {
+    constructor(){
+        this.api = new APIKeyManager();
 
-          <button id="open-settings" class="settings-btn">
-            <i class="fa-solid fa-gear"></i>
-          </button>
-        </div>
+        this.btn = document.getElementById('btn-generate');
+        this.output = document.getElementById('output-content');
 
-        <div class="h-0.5 bg-gradient-to-r from-indigo-500/50 to-transparent"></div>
-      </div>
+        this.langSelect = document.getElementById('language');
+        this.langManual = document.getElementById('language-manual');
 
-      <!-- FORM -->
-      <form id="content-form" class="space-y-5 overflow-y-auto pr-2 custom-scrollbar">
+        this.slider = document.getElementById('paragraph-slider');
+        this.label = document.getElementById('paragraph-label');
 
-        <!-- Type -->
-        <div>
-          <label class="block text-sm text-gray-300 mb-1.5">
-            <i class="fa-solid fa-layer-group mr-2 text-indigo-400"></i>Tipe Konten
-          </label>
+        this.init();
+    }
 
-          <select id="content-type" class="modern-input w-full px-4 py-3 rounded-xl">
-            <option value="cerita">Cerita</option>
-            <option value="motivasi">Kutipan Motivasi</option>
-            <option value="inspiratif">Artikel Inspiratif</option>
-            <option value="islami">Konten Islami</option>
-            <option value="tips">Tips & Trik</option>
-            <option value="fakta">Fakta Unik</option>
-            <option value="review">Review</option>
-            <option value="opini">Opini</option>
-            <option value="berita">Berita</option>
-            <option value="tutorial">Tutorial</option>
-            <option value="resep">Resep</option>
-            <option value="biografi">Biografi</option>
-            <option value="kisah">Kisah Sukses</option>
-            <option value="edukasi">Edukasi</option>
-            <option value="analisa">Analisa</option>
-            <option value="listicle">Listicle</option>
-            <option value="qa">Q&A</option>
-            <option value="cerpen">Cerpen</option>
-            <option value="dialog">Dialog</option>
-            <option value="surat">Surat</option>
-          </select>
-        </div>
+    init(){
+        this.btn.addEventListener('click', () => this.generate());
 
-        <!-- Topic -->
-        <div>
-          <label class="block text-sm text-gray-300 mb-1.5">
-            <i class="fa-solid fa-lightbulb mr-2 text-yellow-400"></i>Ide Pokok
-          </label>
+        this.langSelect.addEventListener('change', ()=>{
+            if(this.langSelect.value === 'Lainnya'){
+                this.langManual.classList.remove('hidden');
+            } else {
+                this.langManual.classList.add('hidden');
+            }
+        });
 
-          <textarea id="topic" rows="3"
-            class="modern-input w-full px-4 py-3 rounded-xl resize-none"
-            placeholder="Contoh: Pemuda miskin jadi kaya"></textarea>
-        </div>
+        this.slider.addEventListener('input', ()=>{
+            this.label.textContent = paragraphMap[this.slider.value];
+        });
+    }
 
-        <!-- Extra Prompt -->
-        <div>
-          <label class="block text-sm text-gray-300 mb-1.5">
-            Tambahan Prompt (Opsional)
-          </label>
+    async generate(){
+        let key = this.api.getKey();
 
-          <textarea id="extra-prompt" rows="2"
-            class="modern-input w-full px-4 py-2 rounded-xl text-sm resize-none"></textarea>
-        </div>
+        if(!key){
+            key = prompt("Masukkan API Key:");
+            this.api.addKey(key);
+        }
 
-      </form>
+        const topic = document.getElementById('topic').value;
+        let lang = this.langSelect.value;
 
-      <!-- Button -->
-      <button id="btn-generate"
-        class="mt-6 w-full gradient-btn py-4 rounded-xl font-bold text-lg flex justify-center items-center gap-2">
-        <i class="fa-solid fa-robot"></i>
-        Buat Konten
-      </button>
+        if(lang === 'Lainnya'){
+            lang = this.langManual.value;
+        }
 
-    </div>
+        const pCount = paragraphMap[this.slider.value];
 
-    <!-- ========= RIGHT ========= -->
-    <div class="flex flex-col bg-gray-900/40 rounded-xl border border-gray-700/50 overflow-hidden">
+        const promptText = generatePrompt(topic, lang, pCount);
 
-      <!-- Header -->
-      <div class="p-4 border-b border-gray-700/50 flex justify-between items-center">
-        <h2 class="text-gray-200 font-semibold">
-          <i class="fa-regular fa-file-lines mr-2"></i>Hasil Generasi
-        </h2>
+        this.output.innerText = "Loading...";
 
-        <div class="flex gap-2">
-          <button id="btn-copy" class="output-btn">
-            <i class="fa-regular fa-copy"></i>
-          </button>
-          <button id="btn-clear" class="output-btn-danger">
-            <i class="fa-solid fa-trash"></i>
-          </button>
-        </div>
-      </div>
+        try{
+            const res = await callAPI(promptText, key);
+            this.output.innerText = res;
+        }catch(e){
+            this.output.innerText = "Error";
+        }
+    }
+}
 
-      <!-- Content -->
-      <div id="output-content"
-        class="flex-grow p-6 overflow-y-auto text-gray-300 custom-scrollbar">
-        <div class="text-center text-gray-500 opacity-50">
-          <i class="fa-solid fa-wind text-4xl mb-3"></i>
-          <p>Konten belum dibuat</p>
-        </div>
-      </div>
+new App();
 
-      <!-- Footer -->
-      <div class="text-center text-xs text-gray-500 p-2 border-t border-gray-700/50">
-        AI dapat membuat kesalahan.
-      </div>
-
-    </div>
-
-  </div>
-
-  <!-- Script -->
-  <script src="app.js"></script>
+})();
+</script>
 
 </body>
 </html>
